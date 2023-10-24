@@ -12,7 +12,7 @@ PLAYER_SPEED = 5
 BULLET_SPEED = 10
 ENEMY_SPEED = 4
 NUM_ENEMIES = 6
-WIN_SCORE = 5  # Set the score required to win the game
+WIN_SCORE = 15  # Set the score required to win the game
 
 # Create the screen
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -169,7 +169,7 @@ while running:
 
         if score >= WIN_SCORE:
             show_win()
-            #game_over = True
+            # game_over = True
 
     if game_over:
         show_game_over()
