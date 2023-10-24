@@ -2,187 +2,198 @@ import pygame
 import math
 import random
 
-# Initialize the pygame
+# Initialize pygame
 pygame.init()
 
+# Constants
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+PLAYER_SPEED = 5
+BULLET_SPEED = 10
+ENEMY_SPEED = 4
+NUM_ENEMIES = 6
+WIN_SCORE = 5  # Set the score required to win the game
+
 # Create the screen
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-# Background
+# Load images
 background = pygame.image.load('background.jpg')
+player_img = pygame.image.load('player.png')
+enemy_img = [pygame.image.load('enemy.png') for _ in range(NUM_ENEMIES)]
+bullet_img = pygame.image.load('bullet.png')
 
-# Title and Icon
-pygame.display.set_caption("Space Invader from Balde")
-icon = pygame.image.load('ufo.png')
-pygame.display.set_icon(icon)
+# Initialize player
+player_x = SCREEN_WIDTH // 2
+player_y = SCREEN_HEIGHT - 64
+player_x_change = 0
 
-# Player
-playerImg = pygame.image.load('player.png')
-playerX = 370
-playerY = 480
-playerX_change = 0
-# Added FOR MORE FUN By BALDE 1 line
-playerY_change = 0
+# Initialize enemies
+enemy_x = [random.randint(0, SCREEN_WIDTH - 64) for _ in range(NUM_ENEMIES)]
+enemy_y = [random.randint(50, 150) for _ in range(NUM_ENEMIES)]
+enemy_x_change = [ENEMY_SPEED for _ in range(NUM_ENEMIES)]
+enemy_y_change = [40 for _ in range(NUM_ENEMIES)]
 
-# Enemy
-enemyImg = []
-enemyX = []
-enemyY = []
-enemyX_change = []
-enemyY_change = []
-
-num_of_enemies = 6
-
-for i in range(num_of_enemies):
-    enemyImg.append(pygame.image.load('enemy.png'))
-    enemyX.append(random.randint(0, 735))
-    enemyY.append(random.randint(50, 150))
-    enemyX_change.append(5)
-    enemyY_change.append(40)
-
-# Bullet
-bulletImg = pygame.image.load('bullet.png')
-bulletX = 0
-bulletY = 480
-bulletX_change = 0
-bulletY_change = 20
-# Ready means you can't see the bullet on the screen
-# Fire means the bullet is currentlty moving
+# Initialize bullets
+bullet_x = 0
+bullet_y = player_y
+bullet_x_change = 0
+bullet_y_change = BULLET_SPEED
 bullet_state = "ready"
 
-# Score
-score_value = 0
-font = pygame.font.Font('freesansbold.ttf', 22)
-textX = 10
-textY = 10
+# Initialize game counter
+game_counter = 3
 
+# Initialize score
+score = 0
+font = pygame.font.Font('freesansbold.ttf', 32)
+text_x = 10
+text_y = 10
+
+# Initialize game over font
+game_over_font = pygame.font.Font('freesansbold.ttf', 64)
+
+# Initialize game over state
+game_over = False  # Set to True when the game ends
 
 def show_score(x, y):
-    score = font.render("Score: " + str(score_value), True, (0, 255, 0))
-    screen.blit(score, (x, y))
+    # Display the player's score on the screen
+    score_display = font.render("Score: " + str(score), True, (0, 255, 0))
+    screen.blit(score_display, (x, y))
 
-# Added FOR MORE FUN By BALDE 1 line
-# enemyY_change = 0
+def show_game_count(x, y, count):
+    # Display the remaining player count on the screen
+    player_count_display = font.render(f"Lives: {count}", True, (255, 255, 255))
+    screen.blit(player_count_display, (x, y))
 
+def show_win():
+    # Display "WIN!!" text on the screen
+    win_surface = game_over_font.render("WIN!!", True, (0, 255, 0))
+    screen.blit(win_surface, (250, 250))
 
 def player(x, y):
-    screen.blit(playerImg, (x, y))
-
+    # Draw the player's character on the screen
+    screen.blit(player_img, (x, y))
 
 def enemy(x, y, i):
-    screen.blit(enemyImg[i], (x, y))
+    # Draw an enemy character on the screen
+    screen.blit(enemy_img[i], (x, y))
 
-
-def fire_bullet(x,y):
+def fire_bullet(x, y):
     global bullet_state
     bullet_state = "fire"
-    screen.blit(bulletImg, (x + 16, y + 10))  
+    screen.blit(bullet_img, (x + 16, y + 10))
 
+def is_collision(enemy_x, enemy_y, bullet_x, bullet_y):
+    # Check if a collision has occurred between an enemy and a bullet
+    distance = math.sqrt((enemy_x - bullet_x) ** 2 + (enemy_y - bullet_y) ** 2)
+    return distance < 27
 
-def isCollision(enemyX, enemyY, bulletX, bulletY):
-    distance = math.sqrt((math.pow(enemyX - bulletX, 2)) + (math.pow(enemyY - bulletY, 2)))
-    if distance < 27:
-        return True
-    else:
-        return False   
-
+def show_game_over():
+    # Display "GAME OVER" text on the screen
+    game_over_surface = game_over_font.render("GAME OVER", True, (255, 0, 0))
+    screen.blit(game_over_surface, (200, 250))
+    restart_message = font.render("Press R to Restart", True, (255, 255, 255))
+    quit_message = font.render("Press Q to Quit", True, (255, 255, 255))
+    screen.blit(restart_message, (250, 350))
+    screen.blit(quit_message, (300, 400))
 
 # Game loop
 running = True
 while running:
-
-    # RGB - red, green, blue
+    # Fill the screen with a black background
     screen.fill((0, 0, 0))
-    # Background Image
     screen.blit(background, (0, 0))
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+    if not game_over:
+        # Event handling when the game is not over
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-        # If keystroke is pressed check whether its right or left
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                playerX_change = -5 
-            if event.key == pygame.K_RIGHT:
-                playerX_change = 5
+            # Handle player input here
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    player_x_change = -PLAYER_SPEED
+                if event.key == pygame.K_RIGHT:
+                    player_x_change = PLAYER_SPEED
+                if event.key == pygame.K_SPACE:
+                    if bullet_state == "ready":
+                        bullet_x = player_x
+                        fire_bullet(bullet_x, bullet_y)
 
-            # If key-space is pressed it triggers the bullet out
-            if event.key == pygame.K_SPACE:
-                if bullet_state == "ready":
-                    # Get the X cordinate of the spaceship
-                    bulletX = playerX
-                    fire_bullet(bulletX, bulletY)        
-                   
-            # Added FOR MORE FUN By BALDE 4 lines
-            if event.key == pygame.K_UP:
-                playerY_change = -5 
-            if event.key == pygame.K_DOWN:
-                playerY_change = 5     
+            if event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
+                    player_x_change = 0
 
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                playerX_change = 0
+        player_x += player_x_change
 
-            # Added FOR MORE FUN By BALDE 2 lines
-            if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
-                playerY_change = 0                   
+        if player_x <= 0:
+            player_x = 0
+        elif player_x >= SCREEN_WIDTH - 64:
+            player_x = SCREEN_WIDTH - 64
 
-    # Checking for boundries of spaceship 'so' it doesn't go out of bounds
-    playerX += playerX_change
+        for i in range(NUM_ENEMIES):
+            enemy_x[i] += enemy_x_change[i]
 
-    if playerX <= 0:
-        playerX = 0
-    elif playerX >= 736:
-        playerX = 736   
+            if enemy_x[i] <= 0:
+                enemy_x_change[i] = ENEMY_SPEED
+                enemy_y[i] += enemy_y_change[i]
+            elif enemy_x[i] >= SCREEN_WIDTH - 64:
+                enemy_x_change[i] = -ENEMY_SPEED
+                enemy_y[i] += enemy_y_change[i]
 
-    # Added FOR MORE FUN By BALDE 5 lines
-    playerY += playerY_change
+            if enemy_y[i] >= SCREEN_HEIGHT - 64:
+                game_over = True  # Game over when enemy crosses the bottom line
+                break
 
-    if playerY <= 0:
-        playerY = 0
-    elif playerY >= 536:
-        playerY = 536 
+            if is_collision(enemy_x[i], enemy_y[i], bullet_x, bullet_y):
+                bullet_y = player_y
+                bullet_state = "ready"
+                score += 1
+                enemy_x[i] = random.randint(0, SCREEN_WIDTH - 64)
+                enemy_y[i] = random.randint(50, 150)
 
-    # Enemy Mouvement
-    for i in range(num_of_enemies):
-        enemyX[i] += enemyX_change[i]
+            enemy(enemy_x[i], enemy_y[i], i)
 
-        if enemyX[i] <= 0:
-            enemyX_change[i] = 4
-            enemyY[i] += enemyY_change[i]
-        elif enemyX[i] >= 736:
-            enemyX_change[i] = -4
-            enemyY[i] += enemyY_change[i]
-
-        # Collision
-        collision = isCollision(enemyX[i], enemyY[i], bulletX, bulletY)
-        if collision:
-            bulletY = 480
+        if bullet_y <= 0:
+            bullet_y = player_y
             bullet_state = "ready"
-            score_value += 1
-            enemyX[i] = random.randint(0, 735)
-            enemyY[i] = random.randint(50, 150)
 
-        enemy(enemyX[i], enemyY[i], i)        
+        if bullet_state == "fire":
+            fire_bullet(bullet_x, bullet_y)
+            bullet_y -= bullet_y_change
 
-    # Bullet Mouvement
-    if bulletY <= 0:
-        bulletY = 480
-        bullet_state = "ready"
-        # These three lines ABOVE is to kill the bullet up & reload it
-    if bullet_state == "fire":
-        fire_bullet(bulletX, bulletY)
-        bulletY -= bulletY_change    
+        player(player_x, player_y)
+        show_score(text_x, text_y)
 
-    # Added FOR MORE FUN By BALDE 4 lines + 1rst one commented
-    # enemyY += enemyY_change
+        if score >= WIN_SCORE:
+            show_win()
+            #game_over = True
 
-    # if enemyY <= 0:
-        # enemyY = 0
-    # elif enemyY >= 536:
-        # enemyY = 536
+    if game_over:
+        show_game_over()
 
-    player(playerX, playerY)
-    show_score(textX, textY)
+        # Event handling for game over state
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    if game_counter > 0:
+                        # Restart the game
+                        game_over = False
+                        player_x = SCREEN_WIDTH // 2
+                        player_y = SCREEN_HEIGHT - 64
+                        score = 0
+                        game_counter -= 1
+                        # Reset enemy positions
+                        enemy_x = [random.randint(0, SCREEN_WIDTH - 64) for _ in range(NUM_ENEMIES)]
+                        enemy_y = [random.randint(50, 150) for _ in range(NUM_ENEMIES)]
+                if event.key == pygame.K_q:
+                    running = False  # Quit the game
+
+    # Update player count next to the score
+    show_game_count(text_x, text_y + 40, game_counter)
+
     pygame.display.update()
