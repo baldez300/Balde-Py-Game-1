@@ -100,3 +100,16 @@ If the player chooses to quit during the game over state, you exit the game.
 After each iteration of the game loop, you update the screen to reflect changes in the game state.
 
 Overall, the code provides a functional and interactive space shooter game with features for scoring, lives, and game restart. Players can control the player character, shoot at enemies, and aim for a high score. The game handles the transition between the main game and the game over state smoothly.
+
+## Image window on game start
+![Local Image](./images/gameStarts.png)
+
+## Image window on game win
+![Local Image](./images/gameWin.png)
+
+## Image window on game over
+![Local Image](./images/gameOver.png)
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
