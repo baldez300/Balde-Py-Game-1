@@ -14,6 +14,7 @@ PLAYER_Y = HEIGHT - SHIP_SIZE
 FLIGHT_TOP = 220  # Leave space above the ship for new enemies to spawn.
 STEP = 1 / 120
 WAVE_POINTS = 15
+CHARGE_TIME = 0.65
 ASSETS = Path(__file__).resolve().parent
 
 
@@ -100,6 +101,9 @@ class Game:
         self.player_x = (WIDTH - SHIP_SIZE) / 2
         self.player_y = PLAYER_Y
         self.bullet = None
+        self.enemy_bolts = []
+        self.charging_enemy = None
+        self.fire_timer = 1.4
         self.flash = None
         self.timer = 0
         self.enemies = [Enemy.spawn() for _ in range(6)]
@@ -117,6 +121,32 @@ class Game:
         elif self.state == "playing" and key == pygame.K_SPACE and self.bullet is None:
             self.bullet = pygame.Vector2(self.player_x + 16, self.player_y - 20)
             self.on_sound("shot")
+
+    def update_enemy_fire(self, dt, hull):
+        bolt_speed = min(440, 280 + 20 * (self.wave - 2))
+        for bolt in self.enemy_bolts[:]:
+            bolt.y += bolt_speed * dt
+            rect = pygame.Rect(round(bolt.x) - 4, round(bolt.y), 8, 20)
+            if rect.colliderect(hull):
+                self.state = "over"
+                self.on_sound("over")
+                return
+            if rect.top >= HEIGHT:
+                self.enemy_bolts.remove(bolt)
+
+        self.fire_timer -= dt
+        if self.fire_timer > 0:
+            return
+        if self.charging_enemy is not None:
+            enemy = self.charging_enemy
+            self.enemy_bolts.append(pygame.Vector2(enemy.x + SHIP_SIZE / 2, enemy.y + SHIP_SIZE))
+            self.charging_enemy = None
+            self.fire_timer = max(0.65, 1.4 - 0.12 * (self.wave - 2))
+        elif len(self.enemy_bolts) < 3:
+            candidates = [enemy for enemy in self.enemies if enemy.y + SHIP_SIZE < hull.top]
+            if candidates:
+                self.charging_enemy = min(candidates, key=lambda enemy: abs(enemy.x - self.player_x))
+                self.fire_timer = CHARGE_TIME
 
     def update(self, dt, direction, bullet_bounds, vertical=0):
         if self.state == "clear":
@@ -146,7 +176,8 @@ class Game:
 
         limit = WIDTH - SHIP_SIZE
         for i, enemy in enumerate(self.enemies):
-            enemy.x += enemy.direction * self.speed * dt
+            if enemy is not self.charging_enemy:
+                enemy.x += enemy.direction * self.speed * dt
             if enemy.x < 0 or enemy.x > limit:
                 enemy.x = -enemy.x if enemy.x < 0 else 2 * limit - enemy.x
                 enemy.direction *= -1
@@ -168,9 +199,16 @@ class Game:
                     self.on_sound("clear")
                     self.state = "clear"
                     self.timer = 1.5
+                    self.enemy_bolts.clear()
+                    self.charging_enemy = None
                     self.enemies.clear()
                     return
+                if enemy is self.charging_enemy:
+                    self.charging_enemy = None
+                    self.fire_timer = 1.4
                 self.enemies[i] = Enemy.spawn()
+        if self.wave >= 2:
+            self.update_enemy_fire(dt, hull)
 
 
 class Display:
@@ -198,6 +236,17 @@ class Display:
         if game.state in ("playing", "paused"):
             for enemy in game.enemies:
                 self.screen.blit(self.enemy, (round(enemy.x), enemy.y))
+            if game.charging_enemy is not None:
+                enemy = game.charging_enemy
+                x, y = round(enemy.x) + SHIP_SIZE // 2, enemy.y + SHIP_SIZE
+                radius = 4 + round(7 * (1 - game.fire_timer / CHARGE_TIME))
+                pygame.draw.circle(self.screen, (255, 205, 82), (x, y), radius, 2)
+                pygame.draw.lines(self.screen, (255, 205, 82), False,
+                                  [(x - 6, y + 14), (x, y + 20), (x + 6, y + 14)], 2)
+            for bolt in game.enemy_bolts:
+                x, y = round(bolt.x), round(bolt.y)
+                pygame.draw.ellipse(self.screen, (246, 83, 57), (x - 5, y, 10, 20))
+                pygame.draw.ellipse(self.screen, (255, 233, 152), (x - 2, y + 5, 4, 12))
             self.screen.blit(self.ship, (round(game.player_x), round(game.player_y)))
             if game.bullet is not None:
                 self.screen.blit(self.bullet, (round(game.bullet.x), round(game.bullet.y)))
@@ -215,6 +264,8 @@ class Display:
             elif game.state == "clear":
                 title = f"Wave {game.wave} clear!"
                 hint = f"Score {game.score}     Wave {game.wave + 1} incoming"
+                if game.wave == 1:
+                    hint = "Wave 2: dodge the bolts or shoot the charging enemy"
             else:
                 title = "Game over"
                 action = "R to restart" if game.restarts else "Enter for a new game"

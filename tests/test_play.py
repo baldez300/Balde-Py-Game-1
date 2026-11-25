@@ -134,6 +134,70 @@ class GameTests(unittest.TestCase):
         audio.play("shot")
         self.assertTrue(pygame.mixer.get_busy())
 
+    def prepare_enemy_fire(self, wave):
+        game = self.game
+        game.wave = wave
+        game.start_wave()
+        game.speed = 0
+        game.enemies = [play.Enemy(game.player_x, 130)]
+        game.fire_timer = 0
+        self.step()
+        return game
+
+    def test_first_wave_never_fires(self):
+        game = self.prepare_enemy_fire(1)
+        for _ in range(600):
+            self.step()
+        self.assertIsNone(game.charging_enemy)
+        self.assertFalse(game.enemy_bolts)
+
+    def test_enemy_warning_dodge_and_pause(self):
+        game = self.prepare_enemy_fire(2)
+        self.assertIs(game.charging_enemy, game.enemies[0])
+        game.speed = 275
+        x = game.charging_enemy.x
+        for _ in range(60):
+            self.step()
+        self.assertEqual(game.charging_enemy.x, x)
+        self.assertFalse(game.enemy_bolts)
+        game.keydown(pygame.K_p)
+        remaining = game.fire_timer
+        self.step()
+        self.assertEqual(game.fire_timer, remaining)
+        game.keydown(pygame.K_p)
+        while game.charging_enemy is not None:
+            self.step()
+        self.assertEqual(len(game.enemy_bolts), 1)
+        for _ in range(180):
+            game.update(play.STEP, 1, self.bounds)
+        self.assertEqual(game.state, "playing")
+        self.assertFalse(game.enemy_bolts)
+
+    def test_enemy_bolt_hit_and_restart(self):
+        game = self.prepare_enemy_fire(2)
+        for _ in range(300):
+            self.step()
+        self.assertEqual(game.state, "over")
+        game.keydown(pygame.K_r)
+        self.assertEqual(game.wave, 1)
+        self.assertFalse(game.enemy_bolts)
+        self.assertIsNone(game.charging_enemy)
+
+    def test_interrupt_charge_and_clear_hazards(self):
+        game = self.prepare_enemy_fire(2)
+        for score in (15, 29):
+            game.score = score
+            enemy = game.charging_enemy
+            game.bullet = pygame.Vector2(enemy.x, enemy.y + 30)
+            self.step()
+            self.assertIsNone(game.charging_enemy)
+            self.assertFalse(game.enemy_bolts)
+            if score == 15:
+                game.fire_timer = 0
+                self.step()
+                game.enemy_bolts.append(pygame.Vector2(5, 400))
+        self.assertEqual(game.state, "clear")
+
     def test_main_loop(self):
         batches = iter([[], [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)],
                         [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)],
