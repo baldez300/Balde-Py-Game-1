@@ -83,6 +83,57 @@ class GameTests(unittest.TestCase):
             self.assertAlmostEqual(self.game.player_x, 300)
             self.assertAlmostEqual(self.game.enemies[0].x, 240)
 
+    def test_flight_controls_and_pause(self):
+        game = self.game
+        game.enemies.clear()
+        x, y = game.player_x, game.player_y
+        game.update(0.1, 1, self.bounds, -1)
+        self.assertAlmostEqual((game.player_x - x)**2 + (game.player_y - y)**2, 30**2)
+        game.keydown(pygame.K_SPACE)
+        self.assertEqual(game.bullet.y, game.player_y - 20)
+        pos = (game.player_x, game.player_y, game.bullet.y)
+        game.keydown(pygame.K_p)
+        game.update(0.1, -1, self.bounds, -1)
+        self.assertEqual((game.player_x, game.player_y, game.bullet.y), pos)
+        game.keydown(pygame.K_p)
+        for vertical, limit in ((-1, play.FLIGHT_TOP), (1, play.PLAYER_Y)):
+            for _ in range(180):
+                game.update(play.STEP, 0, self.bounds, vertical)
+            self.assertEqual(game.player_y, limit)
+
+    def test_sound_events_and_ship_collision(self):
+        events = []
+        self.game.on_sound = events.append
+        self.game.keydown(pygame.K_SPACE)
+        self.game.keydown(pygame.K_SPACE)
+        self.game.score = 14
+        self.hit()
+        self.assertEqual(events, ["shot", "hit", "clear"])
+        self.game.start_wave()
+        self.game.player_y = 280
+        self.game.enemies = [play.Enemy(self.game.player_x, 280)]
+        self.step()
+        self.step()
+        self.assertEqual(events[-1:], ["over"])
+        self.assertEqual(events.count("over"), 1)
+        self.game.keydown(pygame.K_r)
+        self.assertEqual(self.game.player_y, play.PLAYER_Y)
+
+    def test_audio_playback_and_mute(self):
+        pygame.mixer.init()
+        self.addCleanup(pygame.mixer.quit)
+        audio = play.Audio()
+        for name in ("shot", "hit", "clear", "over"):
+            audio.play(name)
+            self.assertTrue(pygame.mixer.get_busy())
+            pygame.mixer.stop()
+        audio.toggle()
+        audio.play("shot")
+        self.assertFalse(pygame.mixer.get_busy())
+        audio.toggle()
+        audio.play("shot")
+        self.assertTrue(pygame.mixer.get_busy())
+
     def test_main_loop(self):
         batches = iter([[], [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)],
                         [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)],

@@ -11,6 +11,7 @@ import pygame
 WIDTH, HEIGHT = 800, 600
 SHIP_SIZE = 64
 PLAYER_Y = HEIGHT - SHIP_SIZE
+FLIGHT_TOP = 220  # Leave space above the ship for new enemies to spawn.
 STEP = 1 / 120
 WAVE_POINTS = 15
 ASSETS = Path(__file__).resolve().parent
@@ -58,8 +59,27 @@ class Enemy:
         return cls(random.randint(0, WIDTH - SHIP_SIZE), random.randint(50, 150))
 
 
+class Audio:
+    def __init__(self):
+        self.muted = False
+        self.effects = {}
+        if pygame.mixer.get_init():
+            for name in ("shot", "hit", "clear", "over"):
+                self.effects[name] = pygame.mixer.Sound(str(ASSETS / "sounds" / (name + ".wav")))
+
+    def play(self, name):
+        if self.effects and not self.muted:
+            self.effects[name].play()
+
+    def toggle(self):
+        self.muted = not self.muted
+        if self.muted and self.effects:
+            pygame.mixer.stop()
+
+
 class Game:
-    def __init__(self, path):
+    def __init__(self, path, on_sound=None):
+        self.on_sound = on_sound or (lambda name: None)
         self.path = path
         self.best = read_best(path)
         self.new_run()
@@ -78,13 +98,16 @@ class Game:
         self.state = "playing"
         self.speed = 240 + 35 * (self.wave - 1)
         self.player_x = (WIDTH - SHIP_SIZE) / 2
+        self.player_y = PLAYER_Y
         self.bullet = None
         self.flash = None
         self.timer = 0
         self.enemies = [Enemy.spawn() for _ in range(6)]
 
     def keydown(self, key):
-        if self.state == "title" and key == pygame.K_RETURN:
+        if key == pygame.K_p and self.state in ("playing", "paused"):
+            self.state = "paused" if self.state == "playing" else "playing"
+        elif self.state == "title" and key == pygame.K_RETURN:
             self.new_run()
         elif self.state == "over" and key == pygame.K_r and self.restarts:
             self.restarts -= 1
@@ -92,9 +115,10 @@ class Game:
         elif self.state == "over" and not self.restarts and key == pygame.K_RETURN:
             self.new_run()
         elif self.state == "playing" and key == pygame.K_SPACE and self.bullet is None:
-            self.bullet = pygame.Vector2(self.player_x + 16, PLAYER_Y - 20)
+            self.bullet = pygame.Vector2(self.player_x + 16, self.player_y - 20)
+            self.on_sound("shot")
 
-    def update(self, dt, direction, bullet_bounds):
+    def update(self, dt, direction, bullet_bounds, vertical=0):
         if self.state == "clear":
             self.timer -= dt
             if self.timer <= 0:
@@ -103,7 +127,12 @@ class Game:
             return
         if self.state != "playing":
             return
-        self.player_x = max(0, min(WIDTH - SHIP_SIZE, self.player_x + direction * 300 * dt))
+        distance = 300 * dt
+        if direction and vertical:
+            distance /= 2 ** 0.5
+        self.player_x = max(0, min(WIDTH - SHIP_SIZE, self.player_x + direction * distance))
+        self.player_y = max(FLIGHT_TOP, min(PLAYER_Y, self.player_y + vertical * distance))
+        hull = pygame.Rect(round(self.player_x), round(self.player_y), SHIP_SIZE, SHIP_SIZE).inflate(-18, -16)
         if self.flash:
             x, y, duration = self.flash
             self.flash = (x, y, duration - dt) if duration > dt else None
@@ -122,18 +151,21 @@ class Game:
                 enemy.x = -enemy.x if enemy.x < 0 else 2 * limit - enemy.x
                 enemy.direction *= -1
                 enemy.y += 40
-            if enemy.y >= PLAYER_Y:
-                self.state = "over"
-                return
             target = pygame.Rect(round(enemy.x), enemy.y, SHIP_SIZE, SHIP_SIZE)
+            if enemy.y >= PLAYER_Y or hull.colliderect(target.inflate(-12, -12)):
+                self.state = "over"
+                self.on_sound("over")
+                return
             if shot is not None and shot.colliderect(target):
                 self.bullet = shot = None
                 self.flash = (*target.center, 0.18)
+                self.on_sound("hit")
                 self.score += 1
                 if self.score > self.best:
                     self.best = self.score
                     save_best(self.path, self.best)
                 if self.score % WAVE_POINTS == 0:
+                    self.on_sound("clear")
                     self.state = "clear"
                     self.timer = 1.5
                     self.enemies.clear()
@@ -161,22 +193,25 @@ class Display:
         label = font.render(text, True, color)
         self.screen.blit(label, label.get_rect(center=(WIDTH // 2, y)))
 
-    def draw(self, game):
+    def draw(self, game, audio):
         self.screen.blit(self.background, (0, 0))
-        if game.state == "playing":
+        if game.state in ("playing", "paused"):
             for enemy in game.enemies:
                 self.screen.blit(self.enemy, (round(enemy.x), enemy.y))
-            self.screen.blit(self.ship, (round(game.player_x), PLAYER_Y))
+            self.screen.blit(self.ship, (round(game.player_x), round(game.player_y)))
             if game.bullet is not None:
                 self.screen.blit(self.bullet, (round(game.bullet.x), round(game.bullet.y)))
             if game.flash:
                 x, y, remaining = game.flash
                 radius = 8 + int(20 * (1 - remaining / 0.18))
                 pygame.draw.circle(self.screen, (255, 218, 99), (x, y), radius, 3)
-        else:
+        if game.state != "playing":
             if game.state == "title":
                 title = "Balde Space Invaders"
-                hint = "Left / Right to move     Space to fire     Enter to start"
+                hint = "Arrows or WASD to fly     Space to fire     Enter to start"
+            elif game.state == "paused":
+                title = "Paused"
+                hint = "P to resume     Q to quit"
             elif game.state == "clear":
                 title = f"Wave {game.wave} clear!"
                 hint = f"Score {game.score}     Wave {game.wave + 1} incoming"
@@ -189,6 +224,10 @@ class Display:
             self.centered(hint, self.small, 325, (255, 255, 255))
         hud = f"Score {game.score}     Best {game.best}     Wave {game.wave}     Restarts {game.restarts}"
         self.centered(hud, self.small, 23, (255, 255, 255))
+        sound = "off" if audio.muted else "on"
+        controls = f"P  Pause     M  Sound {sound}" if audio.effects else "P  Pause     Audio unavailable"
+        if game.state in ("title", "playing", "paused"):
+            self.centered(controls, self.small, 53, (210, 223, 235))
         pygame.display.flip()
 
 
@@ -196,7 +235,8 @@ def main():
     pygame.init()
     try:
         display = Display()
-        game = Game(score_path())
+        audio = Audio()
+        game = Game(score_path(), audio.play)
         clock = pygame.time.Clock()
         elapsed = 0
         while True:
@@ -208,13 +248,16 @@ def main():
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
                         return
+                    if event.key == pygame.K_m:
+                        audio.toggle()
                     game.keydown(event.key)
             keys = pygame.key.get_pressed()
-            direction = int(keys[pygame.K_RIGHT]) - int(keys[pygame.K_LEFT])
+            direction = bool(keys[pygame.K_RIGHT] or keys[pygame.K_d]) - bool(keys[pygame.K_LEFT] or keys[pygame.K_a])
+            vertical = bool(keys[pygame.K_DOWN] or keys[pygame.K_s]) - bool(keys[pygame.K_UP] or keys[pygame.K_w])
             while elapsed >= STEP:
-                game.update(STEP, direction, display.bullet_bounds)
+                game.update(STEP, direction, display.bullet_bounds, vertical)
                 elapsed -= STEP
-            display.draw(game)
+            display.draw(game, audio)
     finally:
         pygame.quit()
 

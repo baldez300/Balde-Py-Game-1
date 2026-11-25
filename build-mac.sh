@@ -8,5 +8,5 @@ fi
 mkdir -p build
 PYINSTALLER_CONFIG_DIR="$PWD/build/cache" python3 -m PyInstaller --noconfirm --windowed --onedir \
     --name "Balde Space Invaders" --target-arch arm64 --specpath "$PWD/build" \
-    --add-data "$PWD/background.jpg:." --add-data "$PWD/player.png:." \
+    --add-data "$PWD/sounds:sounds" --add-data "$PWD/background.jpg:." --add-data "$PWD/player.png:." \
     --add-data "$PWD/enemy.png:." --add-data "$PWD/bullet.png:." "$PWD/play.py"
