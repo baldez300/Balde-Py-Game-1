@@ -1,2 +1,6 @@
 ﻿.DS_Store
 archive.py
+.venv-build/
+build/
+dist/
+__pycache__/
