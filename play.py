@@ -16,6 +16,8 @@ STEP = 1 / 120
 WAVE_POINTS = 15
 SHIELD_COLOR = (100, 235, 255)
 SHIELD_DROP_HIT = 5
+BOSS_INTERVAL = 5
+BOSS_SIZE = (160, 88)
 CHARGE_TIME = 0.65
 ASSETS = Path(__file__).resolve().parent
 
@@ -60,6 +62,22 @@ class Enemy:
     @classmethod
     def spawn(cls):
         return cls(random.randint(0, WIDTH - SHIP_SIZE), random.randint(50, 150))
+
+
+@dataclass
+class Boss:
+    x: float = (WIDTH - BOSS_SIZE[0]) / 2
+    health: int = WAVE_POINTS
+    charging: bool = False
+    triple: bool = False
+
+    @property
+    def rect(self):
+        return pygame.Rect(round(self.x), 108, *BOSS_SIZE)
+
+    def guns(self):
+        offsets = (-60, 0, 60) if self.triple else (-46, 46)
+        return [(self.rect.centerx + dx, self.rect.bottom) for dx in offsets]
 
 
 class Audio:
@@ -111,7 +129,8 @@ class Game:
         self.fire_timer = 1.4
         self.flash = None
         self.timer = 0
-        self.enemies = [Enemy.spawn() for _ in range(6)]
+        self.boss = Boss() if self.wave % BOSS_INTERVAL == 0 else None
+        self.enemies = [] if self.boss else [Enemy.spawn() for _ in range(6)]
 
     def keydown(self, key):
         if key == pygame.K_p and self.state in ("playing", "paused"):
@@ -126,6 +145,25 @@ class Game:
         elif self.state == "playing" and key == pygame.K_SPACE and self.bullet is None:
             self.bullet = pygame.Vector2(self.player_x + 16, self.player_y - 20)
             self.on_sound("shot")
+
+    def update_boss_attack(self, dt, hull):
+        boss = self.boss
+        if not boss.charging:
+            # Track the ship while reloading, then lock the firing lanes.
+            travel = min(250, 145 + 10 * (self.wave // BOSS_INTERVAL)) * dt
+            offset = hull.centerx - boss.rect.centerx
+            boss.x += max(-travel, min(travel, offset))
+            boss.x = max(0, min(WIDTH - BOSS_SIZE[0], boss.x))
+        if self.fire_timer > 0:
+            return
+        if boss.charging:
+            self.enemy_bolts.extend(pygame.Vector2(gun) for gun in boss.guns())
+            boss.charging = False
+            boss.triple = not boss.triple
+            self.fire_timer = 1.25
+        elif not self.enemy_bolts:
+            boss.charging = True
+            self.fire_timer = CHARGE_TIME
 
     def update_enemy_fire(self, dt, hull):
         bolt_speed = min(440, 280 + 20 * (self.wave - 2))
@@ -145,6 +183,9 @@ class Game:
                 self.enemy_bolts.remove(bolt)
 
         self.fire_timer -= dt
+        if self.boss:
+            self.update_boss_attack(dt, hull)
+            return
         if self.fire_timer > 0:
             return
         if self.charging_enemy is not None:
@@ -157,6 +198,25 @@ class Game:
             if candidates:
                 self.charging_enemy = min(candidates, key=lambda enemy: abs(enemy.x - self.player_x))
                 self.fire_timer = CHARGE_TIME
+
+    def record_hit(self, target, cleared):
+        self.flash = (*target.center, 0.18)
+        self.on_sound("hit")
+        self.score += 1
+        if self.score % WAVE_POINTS == SHIELD_DROP_HIT and not self.shielded:
+            self.shield_pickup = pygame.Vector2(target.center)
+        if self.score > self.best:
+            self.best = self.score
+            save_best(self.path, self.best)
+        if cleared:
+            self.on_sound("clear")
+            self.state = "clear"
+            self.timer = 1.5
+            self.shield_pickup = None
+            self.enemy_bolts.clear()
+            self.charging_enemy = None
+            self.enemies.clear()
+            self.boss = None
 
     def update(self, dt, direction, bullet_bounds, vertical=0):
         if self.state == "clear":
@@ -195,6 +255,13 @@ class Game:
             if shot.bottom <= 0:
                 self.bullet = shot = None
 
+        if self.boss and shot is not None and shot.colliderect(self.boss.rect):
+            self.bullet = None
+            self.boss.health -= 1
+            self.record_hit(self.boss.rect, self.boss.health == 0)
+            if self.state == "clear":
+                return
+
         limit = WIDTH - SHIP_SIZE
         for i, enemy in enumerate(self.enemies):
             if enemy is not self.charging_enemy:
@@ -210,22 +277,8 @@ class Game:
                 return
             if shot is not None and shot.colliderect(target):
                 self.bullet = shot = None
-                self.flash = (*target.center, 0.18)
-                self.on_sound("hit")
-                self.score += 1
-                if self.score % WAVE_POINTS == SHIELD_DROP_HIT and not self.shielded:
-                    self.shield_pickup = pygame.Vector2(target.center)
-                if self.score > self.best:
-                    self.best = self.score
-                    save_best(self.path, self.best)
-                if self.score % WAVE_POINTS == 0:
-                    self.on_sound("clear")
-                    self.state = "clear"
-                    self.timer = 1.5
-                    self.shield_pickup = None
-                    self.enemy_bolts.clear()
-                    self.charging_enemy = None
-                    self.enemies.clear()
+                self.record_hit(target, (self.score + 1) % WAVE_POINTS == 0)
+                if self.state == "clear":
                     return
                 if enemy is self.charging_enemy:
                     self.charging_enemy = None
@@ -244,6 +297,7 @@ class Display:
             pygame.image.load(str(ASSETS / name)).convert_alpha()
             for name in ("player.png", "enemy.png", "bullet.png")
         ]
+        self.boss_image = pygame.transform.scale(self.enemy, BOSS_SIZE)
         pygame.display.set_icon(self.ship)
         self.bullet_bounds = self.bullet.get_bounding_rect()
         self.large = pygame.font.Font(None, 68)
@@ -258,6 +312,19 @@ class Display:
     def draw(self, game, audio):
         self.screen.blit(self.background, (0, 0))
         if game.state in ("playing", "paused"):
+            if game.boss:
+                boss = game.boss
+                self.screen.blit(self.boss_image, boss.rect)
+                bar = pygame.Rect(boss.rect.left, boss.rect.top - 16, boss.rect.width, 9)
+                pygame.draw.rect(self.screen, (51, 25, 46), bar)
+                fill = bar.copy()
+                fill.width = round(bar.width * boss.health / WAVE_POINTS)
+                pygame.draw.rect(self.screen, (255, 116, 134), fill)
+                pygame.draw.rect(self.screen, (244, 220, 226), bar, 1)
+                if boss.charging:
+                    for x, y in boss.guns():
+                        pygame.draw.lines(self.screen, (255, 205, 82), False,
+                                          [(x - 7, y), (x, y + 10), (x + 7, y)], 3)
             for enemy in game.enemies:
                 self.screen.blit(self.enemy, (round(enemy.x), enemy.y))
             if game.charging_enemy is not None:
@@ -299,7 +366,11 @@ class Display:
             elif game.state == "clear":
                 title = f"Wave {game.wave} clear!"
                 hint = f"Score {game.score}     Wave {game.wave + 1} incoming"
-                if game.wave == 1:
+                if (game.wave + 1) % BOSS_INTERVAL == 0:
+                    hint = "Boss incoming! Watch the gold firing lanes"
+                elif game.wave % BOSS_INTERVAL == 0:
+                    title = "Boss defeated!"
+                elif game.wave == 1:
                     hint = "Wave 2: dodge the bolts or shoot the charging enemy"
             else:
                 title = "Game over"

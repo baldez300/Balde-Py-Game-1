@@ -257,6 +257,60 @@ class GameTests(unittest.TestCase):
         self.assertIsNone(game.shield_pickup)
         self.assertFalse(game.shielded)
 
+    def test_boss_milestones_and_defeat(self):
+        game = self.game
+        for wave in (5, 10):
+            game.wave = wave - 1
+            game.score = (wave - 1) * play.WAVE_POINTS - 1
+            self.hit()
+            for _ in range(182):
+                self.step()
+            self.assertEqual(game.wave, wave)
+            self.assertFalse(game.enemies)
+            for hit in range(1, 16):
+                target = game.boss.rect
+                game.bullet = pygame.Vector2(target.centerx - 16, target.bottom - 8)
+                self.step()
+                self.assertIsNone(game.bullet)
+                if hit < 15:
+                    self.assertEqual(game.boss.health, 15 - hit)
+                if hit == 5:
+                    self.assertIsNotNone(game.shield_pickup)
+            self.assertEqual(game.state, "clear")
+            self.assertEqual(game.score, wave * 15)
+            for _ in range(182):
+                self.step()
+            self.assertIsNone(game.boss)
+            self.assertEqual(len(game.enemies), 6)
+
+    def test_boss_locks_lanes_and_shield_blocks_center_bolt(self):
+        game = self.game
+        game.wave = 5
+        game.start_wave()
+        game.shielded = True
+        for count in (2, 3):
+            for _ in range(500):
+                self.step()
+                if game.boss.charging:
+                    break
+            self.assertTrue(game.boss.charging)
+            lanes = game.boss.guns()
+            game.keydown(pygame.K_p)
+            timer = game.fire_timer
+            self.step()
+            self.assertEqual(timer, game.fire_timer)
+            game.keydown(pygame.K_p)
+            for _ in range(90):
+                self.step()
+                if game.enemy_bolts:
+                    break
+            self.assertEqual(len(game.enemy_bolts), count)
+            self.assertEqual([tuple(bolt) for bolt in game.enemy_bolts], lanes)
+        for _ in range(180):
+            self.step()
+        self.assertFalse(game.shielded)
+        self.assertEqual(game.state, "playing")
+
     def test_main_loop(self):
         batches = iter([[], [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)],
                         [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)],
