@@ -2,7 +2,9 @@
 
 A single-player Python arcade game. Fly in four directions with the arrow keys or WASD and fire with Space. The ship can fly up to the edge of the enemy spawn area. Every 15 hits clears a wave. Six faster enemies appear after a short break. Hitting an enemy with your ship or letting one reach the bottom defense line ends the round.
 
-From wave 2, a charging enemy stops and shows a gold warning. Move out of its lane or shoot it before the red bolt launches. A bolt hitting your ship ends the round. Later waves fire faster.
+From wave 2, a charging enemy stops and shows a gold warning. Move out of its lane or shoot it before the red bolt launches. An unshielded bolt hit ends the round. Later waves fire faster.
+
+On the fifth hit of each wave, an enemy drops a cyan shield if your ship is unshielded. Fly into it to collect one charge. The cyan ring around your ship absorbs the next bolt and bursts. An unused charge carries into the next wave.
 
 ## Play
 

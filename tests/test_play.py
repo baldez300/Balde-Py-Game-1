@@ -198,6 +198,65 @@ class GameTests(unittest.TestCase):
                 game.enemy_bolts.append(pygame.Vector2(5, 400))
         self.assertEqual(game.state, "clear")
 
+    def collect_first_shield(self):
+        game = self.game
+        game.score = play.SHIELD_DROP_HIT - 1
+        self.hit()
+        pickup = game.shield_pickup
+        self.assertIsNotNone(pickup)
+        game.keydown(pygame.K_p)
+        y = pickup.y
+        self.step()
+        self.assertEqual(pickup.y, y)
+        game.keydown(pygame.K_p)
+        game.player_x = pickup.x - 32
+        game.player_y = play.FLIGHT_TOP
+        game.enemies.clear()
+        for _ in range(160):
+            self.step()
+        self.assertTrue(game.shielded)
+        self.assertIsNone(game.shield_pickup)
+
+    def test_shield_carries_and_absorbs_one_bolt(self):
+        self.collect_first_shield()
+        game = self.game
+        game.score = play.WAVE_POINTS - 1
+        self.hit()
+        for _ in range(182):
+            self.step()
+        self.assertEqual(game.wave, 2)
+        self.assertTrue(game.shielded)
+        for state in ("playing", "over"):
+            game.enemy_bolts.append(pygame.Vector2(game.player_x + 32, game.player_y + 10))
+            self.step()
+            self.assertEqual(game.state, state)
+            self.assertFalse(game.shielded)
+            if state == "playing":
+                self.assertFalse(game.enemy_bolts)
+                self.assertGreater(game.shield_burst, 0)
+
+    def test_shield_does_not_stack_or_protect_from_ramming(self):
+        self.collect_first_shield()
+        game = self.game
+        game.score = play.WAVE_POINTS + play.SHIELD_DROP_HIT - 1
+        self.hit()
+        self.assertIsNone(game.shield_pickup)
+        game.enemies = [play.Enemy(game.player_x, game.player_y)]
+        self.step()
+        self.assertEqual(game.state, "over")
+        game.keydown(pygame.K_r)
+        self.assertFalse(game.shielded)
+
+    def test_missed_shield_expires(self):
+        game = self.game
+        game.score = play.SHIELD_DROP_HIT - 1
+        self.hit()
+        game.enemies.clear()
+        for _ in range(500):
+            self.step()
+        self.assertIsNone(game.shield_pickup)
+        self.assertFalse(game.shielded)
+
     def test_main_loop(self):
         batches = iter([[], [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)],
                         [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)],

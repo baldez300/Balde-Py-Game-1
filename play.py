@@ -14,6 +14,8 @@ PLAYER_Y = HEIGHT - SHIP_SIZE
 FLIGHT_TOP = 220  # Leave space above the ship for new enemies to spawn.
 STEP = 1 / 120
 WAVE_POINTS = 15
+SHIELD_COLOR = (100, 235, 255)
+SHIELD_DROP_HIT = 5
 CHARGE_TIME = 0.65
 ASSETS = Path(__file__).resolve().parent
 
@@ -91,6 +93,7 @@ class Game:
         self.restart_round()
 
     def restart_round(self):
+        self.shielded = False
         self.score = 0
         self.wave = 1
         self.start_wave()
@@ -101,6 +104,8 @@ class Game:
         self.player_x = (WIDTH - SHIP_SIZE) / 2
         self.player_y = PLAYER_Y
         self.bullet = None
+        self.shield_pickup = None
+        self.shield_burst = 0
         self.enemy_bolts = []
         self.charging_enemy = None
         self.fire_timer = 1.4
@@ -128,6 +133,11 @@ class Game:
             bolt.y += bolt_speed * dt
             rect = pygame.Rect(round(bolt.x) - 4, round(bolt.y), 8, 20)
             if rect.colliderect(hull):
+                if self.shielded:
+                    self.shielded = False
+                    self.enemy_bolts.remove(bolt)
+                    self.shield_burst = 0.25
+                    continue
                 self.state = "over"
                 self.on_sound("over")
                 return
@@ -163,6 +173,17 @@ class Game:
         self.player_x = max(0, min(WIDTH - SHIP_SIZE, self.player_x + direction * distance))
         self.player_y = max(FLIGHT_TOP, min(PLAYER_Y, self.player_y + vertical * distance))
         hull = pygame.Rect(round(self.player_x), round(self.player_y), SHIP_SIZE, SHIP_SIZE).inflate(-18, -16)
+        self.shield_burst = max(0, self.shield_burst - dt)
+        if self.shield_pickup is not None:
+            pickup = self.shield_pickup
+            pickup.y += 125 * dt
+            bounds = pygame.Rect(0, 0, 26, 30)
+            bounds.center = round(pickup.x), round(pickup.y)
+            if bounds.colliderect(hull):
+                self.shielded = True
+                self.shield_pickup = None
+            elif bounds.top >= HEIGHT:
+                self.shield_pickup = None
         if self.flash:
             x, y, duration = self.flash
             self.flash = (x, y, duration - dt) if duration > dt else None
@@ -192,6 +213,8 @@ class Game:
                 self.flash = (*target.center, 0.18)
                 self.on_sound("hit")
                 self.score += 1
+                if self.score % WAVE_POINTS == SHIELD_DROP_HIT and not self.shielded:
+                    self.shield_pickup = pygame.Vector2(target.center)
                 if self.score > self.best:
                     self.best = self.score
                     save_best(self.path, self.best)
@@ -199,6 +222,7 @@ class Game:
                     self.on_sound("clear")
                     self.state = "clear"
                     self.timer = 1.5
+                    self.shield_pickup = None
                     self.enemy_bolts.clear()
                     self.charging_enemy = None
                     self.enemies.clear()
@@ -248,6 +272,17 @@ class Display:
                 pygame.draw.ellipse(self.screen, (246, 83, 57), (x - 5, y, 10, 20))
                 pygame.draw.ellipse(self.screen, (255, 233, 152), (x - 2, y + 5, 4, 12))
             self.screen.blit(self.ship, (round(game.player_x), round(game.player_y)))
+            if game.shield_pickup is not None:
+                x, y = round(game.shield_pickup.x), round(game.shield_pickup.y)
+                emblem = [(x - 13, y - 14), (x + 13, y - 14), (x + 12, y + 3),
+                          (x + 7, y + 10), (x, y + 16), (x - 7, y + 10), (x - 12, y + 3)]
+                pygame.draw.polygon(self.screen, (15, 76, 98), emblem)
+                pygame.draw.polygon(self.screen, SHIELD_COLOR, emblem, 2)
+                pygame.draw.line(self.screen, SHIELD_COLOR, (x, y - 8), (x, y + 8), 3)
+            if game.shielded or game.shield_burst > 0:
+                center = round(game.player_x + 32), round(game.player_y + 32)
+                radius = 37 if game.shielded else 38 + int(64 * (0.25 - game.shield_burst))
+                pygame.draw.circle(self.screen, SHIELD_COLOR, center, radius, 2)
             if game.bullet is not None:
                 self.screen.blit(self.bullet, (round(game.bullet.x), round(game.bullet.y)))
             if game.flash:
