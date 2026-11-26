@@ -1,4 +1,6 @@
+import asyncio
 import os
+import platform
 import random
 import sys
 import tempfile
@@ -22,7 +24,13 @@ CHARGE_TIME = 0.65
 ASSETS = Path(__file__).resolve().parent
 
 
+WEB = sys.platform == "emscripten"
+BEST_KEY = "balde-space-invaders.best"
+
+
 def score_path():
+    if WEB:
+        return None
     if sys.platform == "darwin":
         folder = Path.home() / "Library" / "Application Support"
     else:
@@ -31,6 +39,11 @@ def score_path():
 
 
 def read_best(path):
+    if WEB:
+        try:
+            return max(0, int(platform.window.localStorage.getItem(BEST_KEY) or 0))
+        except Exception:
+            return 0
     try:
         return max(0, int(path.read_text()))
     except (OSError, ValueError):
@@ -38,6 +51,13 @@ def read_best(path):
 
 
 def save_best(path, score):
+    if WEB:
+        try:
+            if score > read_best(path):
+                platform.window.localStorage.setItem(BEST_KEY, str(score))
+        except Exception:
+            pass  # Storage can be disabled in embedded games.
+        return
     temp = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,8 +105,9 @@ class Audio:
         self.muted = False
         self.effects = {}
         if pygame.mixer.get_init():
+            extension = ".ogg" if WEB else ".wav"
             for name in ("shot", "hit", "clear", "over"):
-                self.effects[name] = pygame.mixer.Sound(str(ASSETS / "sounds" / (name + ".wav")))
+                self.effects[name] = pygame.mixer.Sound(str(ASSETS / "sounds" / (name + extension)))
 
     def play(self, name):
         if self.effects and not self.muted:
@@ -388,7 +409,7 @@ class Display:
         pygame.display.flip()
 
 
-def main():
+async def main():
     pygame.init()
     try:
         display = Display()
@@ -398,12 +419,16 @@ def main():
         elapsed = 0
         while True:
             # Limit catch-up after a suspended or dragged window.
-            elapsed += min(clock.tick(60) / 1000, 0.1)
+            elapsed += min(clock.tick(0 if WEB else 60) / 1000, 0.1)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
+                        if WEB:
+                            game.new_run()
+                            game.state = "title"
+                            continue
                         return
                     if event.key == pygame.K_m:
                         audio.toggle()
@@ -415,9 +440,10 @@ def main():
                 game.update(STEP, direction, display.bullet_bounds, vertical)
                 elapsed -= STEP
             display.draw(game, audio)
+            await asyncio.sleep(0)
     finally:
         pygame.quit()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
