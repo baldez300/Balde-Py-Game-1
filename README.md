@@ -12,6 +12,12 @@ Open **Balde Space Invaders.app** on Apple Silicon, or run the source with a Pyt
 
 Press Enter to start. P pauses or resumes play, and M toggles the arcade sounds for shots, hits, wave clears, and losses. After a loss, press R to use one of three restarts. Each restart begins at wave one with zero points. Once the restarts are spent, Enter starts a new game. Q or Escape quits. On macOS the personal best is saved in `~/Library/Application Support/Balde Space Invaders/best.txt`.
 
+## Browser release on itch.io
+
+The web build uses Pygbag 0.9.3 and needs network access to its hosted Python runtime. In a Python 3.11 environment, install `pygbag==0.9.3`, make FFmpeg available on your PATH, then run `./build-web.sh`. The upload file is `dist/balde-space-invaders-web.zip`.
+
+Create an HTML project on itch.io, upload the ZIP intact, select **This file will be played in the browser**, and set the embed to **800 × 600**. Preview the draft before publishing. Click inside the game and press Enter. Use a desktop keyboard. Browser scores are saved locally when the browser permits storage. Q or Escape returns to the title screen in the browser.
+
 ## Build the Apple Silicon app
 
 From the project directory, using native Python 3.11:

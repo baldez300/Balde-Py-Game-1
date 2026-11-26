@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 import unittest
@@ -317,7 +318,7 @@ class GameTests(unittest.TestCase):
                         [pygame.event.Event(pygame.QUIT)]])
         with patch.object(play, "score_path", return_value=self.game.path), \
                 patch.object(pygame.event, "get", side_effect=batches):
-            play.main()
+            asyncio.run(play.main())
 
 
 if __name__ == "__main__":
