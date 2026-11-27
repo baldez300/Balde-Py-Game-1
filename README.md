@@ -16,7 +16,7 @@ Press Enter to start. P pauses or resumes play, and M toggles the arcade sounds 
 
 The web build uses Pygbag 0.9.3 and needs network access to its hosted Python runtime. In a Python 3.11 environment, install `pygbag==0.9.3`, make FFmpeg available on your PATH, then run `./build-web.sh`. The upload file is `dist/balde-space-invaders-web.zip`.
 
-Create an HTML project on itch.io, upload the ZIP intact, select **This file will be played in the browser**, and set the embed to **800 × 600**. Preview the draft before publishing. Click inside the game and press Enter. Use a desktop keyboard. Browser scores are saved locally when the browser permits storage. Q or Escape returns to the title screen in the browser.
+Create an HTML project on itch.io, upload the ZIP intact, select **This file will be played in the browser**, and set the embed to **800 × 600**. Preview the draft before publishing. Click inside the game and press Enter. Use a desktop keyboard. Browser scores are saved locally when the browser permits storage. Click the upper-right fullscreen button to enlarge the game. Escape returns to the embedded view and preserves your run. Q returns to the title screen in the browser.
 
 ## Build the Apple Silicon app
 

@@ -1,0 +1,47 @@
+<style>
+  #fullscreen-toggle {
+    position: fixed; right: 8px; top: 8px; z-index: 10000;
+    width: 38px; height: 38px; border: 1px solid #a9b8c6; border-radius: 5px;
+    background: #101629dc; color: white; cursor: pointer;
+  }
+  #fullscreen-toggle:focus-visible { outline: 3px solid #80f5d2; }
+  html:fullscreen { background: #080c19; }
+  html:fullscreen body { background: transparent !important; }
+  html:fullscreen #canvas {
+    position: fixed !important; inset: 0 !important; margin: auto !important;
+    width: min(100vw, 133.333333vh) !important;
+    height: min(100vh, 75vw) !important;
+  }
+</style>
+<button id="fullscreen-toggle" type="button" hidden title="Enter fullscreen" aria-label="Enter fullscreen">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <path d="M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6"/>
+  </svg>
+</button>
+<script>
+(() => {
+  const button = document.getElementById("fullscreen-toggle");
+  if (!document.fullscreenEnabled) return;
+  button.hidden = false;
+  document.addEventListener("fullscreenchange", () => {
+    const active = Boolean(document.fullscreenElement);
+    button.title = active ? "Exit fullscreen (Esc)" : "Enter fullscreen";
+    button.setAttribute("aria-label", button.title);
+    document.getElementById("canvas").focus();
+  });
+  button.addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (error) {
+      console.warn("Fullscreen unavailable", error);
+    }
+  });
+  window.addEventListener("keydown", event => {
+    if (event.key === "Escape" && document.fullscreenElement) {
+      event.stopImmediatePropagation();
+      document.exitFullscreen().catch(() => {});
+    }
+  }, true);
+})();
+</script>
