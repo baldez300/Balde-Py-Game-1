@@ -12,6 +12,17 @@ done
 python3 -m pygbag --build --archive --no_opt --width 800 --height 600 \
     --title "Balde Space Invaders" "$stage"
 # Pygbag requests the tarball on localhost and the APK on itch.io.
-(cd "$stage/build/web" && zip -q ../web.zip balde-space-invaders.tar.gz)
+webdir="$stage/build/web"
+python3 - "$webdir/index.html" <<'PYTHON'
+import sys
+from pathlib import Path
+
+index = Path(sys.argv[1])
+html = index.read_text()
+if "</body>" not in html:
+    raise SystemExit("Could not locate the end of the Pygbag page")
+index.write_text(html.replace("</body>", Path("web/fullscreen.html").read_text() + "</body>", 1))
+PYTHON
+(cd "$webdir" && zip -q ../web.zip index.html balde-space-invaders.tar.gz)
 unzip -tq "$stage/build/web.zip"
 cp "$stage/build/web.zip" dist/balde-space-invaders-web.zip
